@@ -18,7 +18,8 @@ ENTRY_IDS = {
     "code": "entry.32105598",     # 도서코드
     "title": "entry.1234176416",  # 도서명
     "author": "entry.628826984",  # 저자명
-    "status": "entry.12641564"    # 대출/반납
+    "status": "entry.12641564",   # 대출/반납
+    "renter": "entry.615776096"   # 대여자 (새로 추가된 entry id)
 }
 
 # -------------------------
@@ -32,9 +33,18 @@ creds = Credentials.from_service_account_file("service_account.json", scopes=SCO
 client = gspread.authorize(creds)
 
 sheet = client.open_by_key(SHEET_KEY).worksheet(SHEET_NAME)
-rows = sheet.get_all_records(
-    expected_headers=["코드번호", "제목", "지은이", "출판사", "상태", "기타"]
-)
+# 구글 시트에 수식(formula)이 있는 경우 API에서 수식 문자열을 그대로 반환할 수 있음.
+# 대신 표시된(계산된) 값을 확실히 가져오기 위해 get_all_values()로 헤더와 데이터를 직접 읽어 파싱합니다.
+data = sheet.get_all_values()
+if not data:
+    rows = []
+else:
+    headers = [h.strip() for h in data[0]]
+    rows = []
+    for r in data[1:]:
+        # 헤더 수보다 값이 적으면 빈 문자열로 보정
+        row_dict = {headers[i]: (r[i] if i < len(r) else "") for i in range(len(headers))}
+        rows.append(row_dict)
 
 
 # -------------------------
@@ -46,6 +56,7 @@ for row in rows:
     code = str(row['코드번호'])
     title = str(row['제목'])
     author = str(row['지은이'])
+    renter = str(row.get('대여자', '') or '')
     status = str(row['상태']).strip()
 
     # 상태 한글 → 정확한 인코딩 매핑
@@ -60,6 +71,7 @@ for row in rows:
         f"&{ENTRY_IDS['code']}={urllib.parse.quote(code)}"
         f"&{ENTRY_IDS['title']}={urllib.parse.quote(title)}"
         f"&{ENTRY_IDS['author']}={urllib.parse.quote(author)}"
+        f"&{ENTRY_IDS['renter']}={urllib.parse.quote(renter)}"
         f"&{ENTRY_IDS['status']}={status_encoded}"
     )
 
